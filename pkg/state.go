@@ -26,11 +26,11 @@ func NewSQLiteState(dbPath string) (*SQLiteStateStore, error) {
 	// Create table if it doesn't exist
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS state (
-			config_key TEXT,
 			location_key TEXT,
+			instance_key TEXT,
 			operation_name TEXT,
 			value TEXT,
-			PRIMARY KEY (config_key, location_key, operation_name)
+			PRIMARY KEY (location_key, instance_key, operation_name)
 		)
 	`)
 	if err != nil {
