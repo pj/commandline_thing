@@ -1,0 +1,23 @@
+version: 2
+project_name: commandline_thing  # Replace with your application name
+
+builds:
+  - id: commandline_thing
+    binary: commandline_thing
+    main: .  # Path to your main package
+    goos:
+      - darwin
+    goarch:
+      - arm64
+    ldflags: >-
+      -s -w
+    env:
+      - CGO_ENABLED=0
+
+    hooks:
+      post:
+        - cmd: sudo install -m 755 dist/commandline_thing_darwin_arm64/commandline_thing /usr/local/bin
+
+# archives:
+#   - format: tar.gz
+#     name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"

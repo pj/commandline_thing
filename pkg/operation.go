@@ -1,86 +1,90 @@
 package pkg
 
 type Operation interface {
-	Name() string
+	Name() OperationName
 	IsAsync() bool
-	Show() bool
-	Update(interface{}) (string, error)
-	Generate(interface{}) (string, error)
+	Update(string) (string, error)
+	Generate(state string) (interface{}, error)
+	// Load(config interface{}, state string) error
 }
 
 // Branch
-
 type Branch struct{}
 
-func (b *Branch) Name() string                         { return "branch" }
-func (b *Branch) IsAsync() bool                        { return false }
-func (b *Branch) Show() bool                           { return true }
-func (b *Branch) Update(interface{}) (string, error)   { return "", nil }
-func (b *Branch) Generate(interface{}) (string, error) { return "", nil }
+func (b *Branch) Name() OperationName                    { return "branch" }
+func (b *Branch) IsAsync() bool                          { return false }
+func (b *Branch) Update(string) (string, error)          { return "", nil }
+func (b *Branch) Generate(_ string) (interface{}, error) { return "test", nil }
 
-func LoadBranch(config interface{}) (Operation, error) {
-	return &Branch{}, nil
-}
+// func (b *Branch) Load(state StateStore) error {
+// 	return nil
+// }
 
-// venv
-type PythonVirtualEnv struct{}
+// func LoadBranch(locationKey LocationKey, instanceKey InstanceKey, operationName OperationName, config interface{}) (Operation, error) {
+// 	return &Branch{}, nil
+// }
 
-func (*PythonVirtualEnv) Name() string                         { return "venv" }
-func (*PythonVirtualEnv) IsAsync() bool                        { return false }
-func (*PythonVirtualEnv) Show() bool                           { return true }
-func (*PythonVirtualEnv) Update(interface{}) (string, error)   { return "", nil }
-func (*PythonVirtualEnv) Generate(interface{}) (string, error) { return "", nil }
+// // venv
+// type PythonVirtualEnv struct{}
 
-func LoadPythonVirtualEnv(config interface{}) (Operation, error) {
-	return &PythonVirtualEnv{}, nil
-}
+// func (*PythonVirtualEnv) Name() string                         { return "venv" }
+// func (*PythonVirtualEnv) IsAsync() bool                        { return false }
+// func (*PythonVirtualEnv) Show() bool                           { return true }
+// func (*PythonVirtualEnv) Update(interface{}) (string, error)   { return "", nil }
+// func (*PythonVirtualEnv) Generate(interface{}) (string, error) { return "", nil }
 
-// vim mode
-type VimMode struct{}
+// func LoadPythonVirtualEnv(config interface{}) (Operation, error) {
+// 	return &PythonVirtualEnv{}, nil
+// }
 
-func (*VimMode) Name() string                         { return "vim" }
-func (*VimMode) IsAsync() bool                        { return false }
-func (*VimMode) Show() bool                           { return true }
-func (*VimMode) Update(interface{}) (string, error)   { return "", nil }
-func (*VimMode) Generate(interface{}) (string, error) { return "", nil }
+// // vim mode
+// type VimMode struct{}
 
-func LoadVimMode(config interface{}) (Operation, error) {
-	return &VimMode{}, nil
-}
+// func (*VimMode) Name() string                         { return "vim" }
+// func (*VimMode) IsAsync() bool                        { return false }
+// func (*VimMode) Show() bool                           { return true }
+// func (*VimMode) Update(interface{}) (string, error)   { return "", nil }
+// func (*VimMode) Generate(interface{}) (string, error) { return "", nil }
 
-// gcloud project
-type GCloudProject struct{}
+// func LoadVimMode(config interface{}) (Operation, error) {
+// 	return &VimMode{}, nil
+// }
 
-func (*GCloudProject) Name() string                         { return "gcloud" }
-func (*GCloudProject) IsAsync() bool                        { return false }
-func (*GCloudProject) Show() bool                           { return true }
-func (*GCloudProject) Update(interface{}) (string, error)   { return "", nil }
-func (*GCloudProject) Generate(interface{}) (string, error) { return "", nil }
+// // gcloud project
+// type GCloudProject struct{}
 
-func LoadGCloudProject(config interface{}) (Operation, error) {
-	return &GCloudProject{}, nil
-}
+// func (*GCloudProject) Name() string                         { return "gcloud" }
+// func (*GCloudProject) IsAsync() bool                        { return false }
+// func (*GCloudProject) Show() bool                           { return true }
+// func (*GCloudProject) Update(interface{}) (string, error)   { return "", nil }
+// func (*GCloudProject) Generate(interface{}) (string, error) { return "", nil }
 
-// exit code
-type ExitCode struct{}
+// func LoadGCloudProject(config interface{}) (Operation, error) {
+// 	return &GCloudProject{}, nil
+// }
 
-func (*ExitCode) Name() string                         { return "exit_code" }
-func (*ExitCode) IsAsync() bool                        { return false }
-func (*ExitCode) Show() bool                           { return true }
-func (*ExitCode) Update(interface{}) (string, error)   { return "", nil }
-func (*ExitCode) Generate(interface{}) (string, error) { return "", nil }
-func LoadExitCode(config interface{}) (Operation, error) {
-	return &ExitCode{}, nil
-}
+// // exit code
+// type ExitCode struct{}
 
-type OperationLoader func(interface{}) (Operation, error)
+// func (*ExitCode) Name() string                         { return "exit_code" }
+// func (*ExitCode) IsAsync() bool                        { return false }
+// func (*ExitCode) Show() bool                           { return true }
+// func (*ExitCode) Update(interface{}) (string, error)   { return "", nil }
+// func (*ExitCode) Generate(interface{}) (string, error) { return "", nil }
+// func LoadExitCode(config interface{}) (Operation, error) {
+// 	return &ExitCode{}, nil
+// }
 
-func LoadAvailableOperations() map[string]OperationLoader {
-	return map[string]OperationLoader{
-		(&Branch{}).Name():           LoadBranch,
-		(&PythonVirtualEnv{}).Name(): LoadPythonVirtualEnv,
-		(&VimMode{}).Name():          LoadVimMode,
-		(&GCloudProject{}).Name():    LoadGCloudProject,
-		(&ExitCode{}).Name():         LoadExitCode,
+type NewOperation func() Operation
+
+type Operations map[OperationName]NewOperation
+
+func LoadAvailableOperations() Operations {
+	return map[OperationName]NewOperation{
+		(&Branch{}).Name(): func() Operation { return &Branch{} },
+		// (&PythonVirtualEnv{}).Name(): LoadPythonVirtualEnv,
+		// (&VimMode{}).Name():          LoadVimMode,
+		// (&GCloudProject{}).Name():    LoadGCloudProject,
+		// (&ExitCode{}).Name():         LoadExitCode,
 	}
 }
