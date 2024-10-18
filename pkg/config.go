@@ -94,7 +94,8 @@ type Location struct {
 }
 
 type AllConfigs struct {
-	Configs map[LocationKey]Location `mapstructure:"configs"`
+	Configs      map[LocationKey]Location `mapstructure:"configs"`
+	PostCommands []string                 `mapstructure:"postCommands"`
 }
 
 func LoadConfig(loadedOperations Operations) (*AllConfigs, error) {

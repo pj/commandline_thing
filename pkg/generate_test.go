@@ -15,7 +15,7 @@ type MockOperationState struct {
 	Bar string `json:"bar"`
 }
 
-func (m *MockOperation) Generate(state string) (interface{}, error) {
+func (m *MockOperation) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	var mockState MockOperationState
 	err := json.Unmarshal([]byte(state), &mockState)
 	if err != nil {
@@ -36,7 +36,7 @@ func (m *MockOperation) IsAsync() bool {
 	return false
 }
 
-func (m *MockOperation) Update(string) (string, error) {
+func (m *MockOperation) Update(string, string) (string, error) {
 	return "", nil
 }
 
@@ -44,7 +44,7 @@ type MockOperation2 struct {
 	Baz string
 }
 
-func (m *MockOperation2) Generate(state string) (interface{}, error) {
+func (m *MockOperation2) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	return map[string]string{
 		"baz": m.Baz,
 	}, nil
@@ -58,7 +58,7 @@ func (m *MockOperation2) IsAsync() bool {
 	return false
 }
 
-func (m *MockOperation2) Update(string) (string, error) {
+func (m *MockOperation2) Update(string, string) (string, error) {
 	return "", nil
 }
 
@@ -86,7 +86,7 @@ func TestGenerateContent(t *testing.T) {
 	memoryStateStore := NewMemoryStateStore()
 
 	memoryStateStore.Set(LocationKey("pane"), InstanceKey("test"), OperationName("test"), `{"bar": "bar"}`)
-	content, err := GenerateContent(memoryStateStore, config.Configs["pane"], LocationKey("pane"), InstanceKey("test"))
+	content, err := GenerateContent(memoryStateStore, config.Configs["pane"], LocationKey("pane"), InstanceKey("test"), "/Users/pauljohnson/Programming/commandline_thing")
 	require.NoError(t, err)
 	require.Equal(t, "test > foo > bar > baz", content)
 }

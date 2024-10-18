@@ -7,7 +7,7 @@ import (
 )
 
 // GenerateContent takes a LocationConfig and generates content based on the operations and template
-func GenerateContent(state StateStore, config Location, configKey LocationKey, locationKey InstanceKey) (string, error) {
+func GenerateContent(state StateStore, config Location, locationKey LocationKey, instanceKey InstanceKey, locationPath string) (string, error) {
 	// Create a map to store data from operations
 	data := make(map[string]interface{})
 
@@ -15,7 +15,7 @@ func GenerateContent(state StateStore, config Location, configKey LocationKey, l
 	for _, opWrapper := range config.Operations {
 		op := opWrapper.Operation
 		operationName := op.Name()
-		operationState, err := state.Get(configKey, locationKey, operationName)
+		operationState, err := state.Get(locationKey, instanceKey, operationName)
 		if err != nil {
 			return "", fmt.Errorf("error getting state for operation %s: %w", op.Name(), err)
 		}
@@ -23,7 +23,7 @@ func GenerateContent(state StateStore, config Location, configKey LocationKey, l
 		// if err := json.Unmarshal([]byte(operationState), &operationStateInterface); err != nil {
 		// 	return "", fmt.Errorf("error unmarshaling state for operation %s: %w", op.Name(), err)
 		// }
-		result, err := op.Generate(operationState)
+		result, err := op.Generate(locationKey, instanceKey, locationPath, operationState)
 		if err != nil {
 			return "", fmt.Errorf("error generating data for operation %s: %w", op.Name(), err)
 		}
