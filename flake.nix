@@ -20,7 +20,7 @@
         commandline_thing = pkgs.buildGoApplication {
           pname = "commandline_thing";
           version = "1.0.0";
-          src = ./pkg;
+          src = ./.;
           modules = ./gomod2nix.toml;
         };
       in
