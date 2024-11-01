@@ -26,7 +26,7 @@
       in
       {
         packages = {
-          default = commandline_thing
+          default = commandline_thing;
         };
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
