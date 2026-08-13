@@ -61,6 +61,29 @@ func TestListMemesIgnoresDirectories(t *testing.T) {
 	require.Equal(t, []string{"pepe"}, names)
 }
 
+func TestMemeCodepointAssignsByIndexInSortedOrder(t *testing.T) {
+	dir := t.TempDir()
+	writeTestImage(t, dir, "doge.png", []byte("a"))
+	writeTestImage(t, dir, "pepe.jpg", []byte("b"))
+
+	got, err := MemeCodepoint(dir, "doge")
+	require.NoError(t, err)
+	require.Equal(t, rune(MemeCodepointBase), got)
+
+	got, err = MemeCodepoint(dir, "pepe")
+	require.NoError(t, err)
+	require.Equal(t, rune(MemeCodepointBase+1), got)
+}
+
+func TestMemeCodepointNotFound(t *testing.T) {
+	dir := t.TempDir()
+	writeTestImage(t, dir, "pepe.jpg", []byte("a"))
+
+	_, err := MemeCodepoint(dir, "nonexistent")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no meme named")
+}
+
 func TestResolveMemeExactFilename(t *testing.T) {
 	dir := t.TempDir()
 	path := writeTestImage(t, dir, "pepe.jpg", []byte("a"))

@@ -54,6 +54,31 @@ func ListMemes(dir string) ([]string, error) {
 	return names, nil
 }
 
+// MemeCodepointBase is U+100000, the start of the Supplementary Private Use
+// Area (Plane 16). MemeTerminal (the iTerm2 fork at github:pj/iTerm2, branch
+// memeterminal) patches this 1024-code-point range to render double-width
+// and pulls its glyphs from MemeFont.ttf's SBIX color bitmaps.
+const MemeCodepointBase = 0x100000
+
+// MemeCodepoint returns the PUA code point assigned to name: MemeCodepointBase
+// plus name's index in ListMemes' sorted output. This is the same order
+// emojifont's `just build-dotfiles-font` recipe uses to assign code points
+// when injecting glyphs into MemeFont.ttf, so the two stay in sync as long
+// as the font is rebuilt whenever the meme directory's contents change —
+// there's no separate manifest file recording the mapping.
+func MemeCodepoint(dir, name string) (rune, error) {
+	names, err := ListMemes(dir)
+	if err != nil {
+		return 0, err
+	}
+	for i, n := range names {
+		if n == name {
+			return rune(MemeCodepointBase + i), nil
+		}
+	}
+	return 0, fmt.Errorf("no meme named %q in %s", name, dir)
+}
+
 // ResolveMeme finds the file in dir for the given name. It matches the exact
 // filename first (so "pepe.jpg" works even if invoked with the extension),
 // then falls back to a case-insensitive match on filename-without-extension.

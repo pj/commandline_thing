@@ -10,9 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMemeOperationGenerateReturnsSequencePerName(t *testing.T) {
+func TestMemeOperationGenerateReturnsCodepointPerName(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "pepe.jpg"), []byte("hello"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "doge.png"), []byte("a"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "pepe.jpg"), []byte("b"), 0644))
 	t.Setenv(MemeDirEnvVar, dir)
 
 	op := &Meme{}
@@ -23,9 +24,9 @@ func TestMemeOperationGenerateReturnsSequencePerName(t *testing.T) {
 
 	memes, ok := result.(map[string]string)
 	require.True(t, ok)
-	require.Contains(t, memes, "pepe")
-	// base64("hello") = aGVsbG8=
-	require.Contains(t, memes["pepe"], "aGVsbG8=")
+	// ListMemes sorts "doge" before "pepe", so doge gets the base codepoint.
+	require.Equal(t, string(rune(MemeCodepointBase)), memes["doge"])
+	require.Equal(t, string(rune(MemeCodepointBase+1)), memes["pepe"])
 }
 
 func TestMemeOperationUsableAsDottedTemplateField(t *testing.T) {
@@ -42,7 +43,7 @@ func TestMemeOperationUsableAsDottedTemplateField(t *testing.T) {
 
 	var buf strings.Builder
 	require.NoError(t, tmpl.Execute(&buf, map[string]interface{}{"meme": result}))
-	require.Contains(t, buf.String(), "aGVsbG8=")
+	require.Equal(t, string(rune(MemeCodepointBase)), buf.String())
 }
 
 func TestMemeOperationRegisteredInAvailableOperations(t *testing.T) {

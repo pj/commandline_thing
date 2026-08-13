@@ -176,17 +176,16 @@ func (*HostDetails) Generate(locationKey LocationKey, instanceKey InstanceKey, l
 	return HostDetailsResult{Hostname: hostname, IsSSH: false}, nil
 }
 
-// Meme exposes every image in the meme directory to templates as
-// .meme.<name>, each already rendered to its OSC 1337 inline-image escape
-// sequence (2x1 cells). Names containing characters that aren't valid in a
-// template's dotted field access (e.g. "doge-2") need {{ index .meme "doge-2" }}
-// instead of {{ .meme.doge-2 }}.
+// Meme exposes every meme in the meme directory to templates as
+// .meme.<name>, each as a single character at that meme's PUA code point
+// (see MemeCodepoint) — normal cell content that survives tmux redraws,
+// unlike an OSC 1337 inline image (which tmux doesn't track in its own
+// screen buffer, so it vanishes on the next redraw). Rendering requires
+// MemeTerminal with MemeFont.ttf installed; other terminals show tofu.
+// Names containing characters that aren't valid in a template's dotted
+// field access (e.g. "doge-2") need {{ index .meme "doge-2" }} instead of
+// {{ .meme.doge-2 }}.
 type Meme struct{}
-
-const (
-	memeWidth  = 2
-	memeHeight = 1
-)
 
 func (*Meme) Name() OperationName                   { return "meme" }
 func (*Meme) IsAsync() bool                         { return false }
@@ -199,12 +198,8 @@ func (*Meme) Generate(locationKey LocationKey, instanceKey InstanceKey, location
 	}
 
 	memes := make(map[string]string, len(names))
-	for _, name := range names {
-		seq, err := BuildMemeSequence(dir, name, memeWidth, memeHeight)
-		if err != nil {
-			continue
-		}
-		memes[name] = seq
+	for i, name := range names {
+		memes[name] = string(rune(MemeCodepointBase + i))
 	}
 
 	return memes, nil
