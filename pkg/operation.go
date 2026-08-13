@@ -176,6 +176,40 @@ func (*HostDetails) Generate(locationKey LocationKey, instanceKey InstanceKey, l
 	return HostDetailsResult{Hostname: hostname, IsSSH: false}, nil
 }
 
+// Meme exposes every image in the meme directory to templates as
+// .meme.<name>, each already rendered to its OSC 1337 inline-image escape
+// sequence (2x1 cells). Names containing characters that aren't valid in a
+// template's dotted field access (e.g. "doge-2") need {{ index .meme "doge-2" }}
+// instead of {{ .meme.doge-2 }}.
+type Meme struct{}
+
+const (
+	memeWidth  = 2
+	memeHeight = 1
+)
+
+func (*Meme) Name() OperationName                   { return "meme" }
+func (*Meme) IsAsync() bool                         { return false }
+func (*Meme) Update(string, string) (string, error) { return "", nil }
+func (*Meme) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
+	dir := MemeDir()
+	names, err := ListMemes(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	memes := make(map[string]string, len(names))
+	for _, name := range names {
+		seq, err := BuildMemeSequence(dir, name, memeWidth, memeHeight)
+		if err != nil {
+			continue
+		}
+		memes[name] = seq
+	}
+
+	return memes, nil
+}
+
 type NewOperation func() Operation
 
 type Operations map[OperationName]NewOperation
@@ -192,5 +226,6 @@ func LoadAvailableOperations() Operations {
 		(&TmuxCurrentPane{}).Name():  func() Operation { return &TmuxCurrentPane{} },
 		(&HostDetails{}).Name():      func() Operation { return &HostDetails{} },
 		(&InTmux{}).Name():           func() Operation { return &InTmux{} },
+		(&Meme{}).Name():             func() Operation { return &Meme{} },
 	}
 }

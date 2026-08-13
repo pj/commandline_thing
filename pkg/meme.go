@@ -118,20 +118,31 @@ func WrapForTmux(seq string) string {
 	return "\033Ptmux;" + doubled + "\033\\"
 }
 
+// BuildMemeSequence resolves name to a file in dir and returns the
+// inline-image escape sequence at width x height cells, wrapped for tmux
+// passthrough if TMUX is set in the environment.
+func BuildMemeSequence(dir, name string, width, height int) (string, error) {
+	path, err := ResolveMeme(dir, name)
+	if err != nil {
+		return "", err
+	}
+	seq, err := BuildEscapeSequence(path, width, height)
+	if err != nil {
+		return "", err
+	}
+	if os.Getenv("TMUX") != "" {
+		seq = WrapForTmux(seq)
+	}
+	return seq, nil
+}
+
 // EmitMeme resolves name to a file in dir, builds the inline-image escape
 // sequence at width x height cells, and writes it to w — wrapped for tmux
 // passthrough if TMUX is set in the environment.
 func EmitMeme(w io.Writer, dir, name string, width, height int) error {
-	path, err := ResolveMeme(dir, name)
+	seq, err := BuildMemeSequence(dir, name, width, height)
 	if err != nil {
 		return err
-	}
-	seq, err := BuildEscapeSequence(path, width, height)
-	if err != nil {
-		return err
-	}
-	if os.Getenv("TMUX") != "" {
-		seq = WrapForTmux(seq)
 	}
 	_, err = io.WriteString(w, seq)
 	return err
