@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 
 	"github.com/pj/commandline_thing/pkg"
 	"github.com/spf13/cobra"
@@ -216,79 +215,11 @@ func main() {
 		Args: cobra.ExactArgs(4),
 	}
 
-	var memeCmd = &cobra.Command{
-		Use:   "meme <name> [width] [height]",
-		Short: "Print a small image inline via iTerm2's OSC 1337 File= protocol",
-		Long: `Print a small image inline in the terminal via iTerm2's OSC 1337 File=
-protocol (the same escape sequence imgcat/it2cli use) — no custom font or
-font injection needed. Requires an iTerm2-family terminal with inline-image
-support.
-
-Images are read from $MEME_DIR (default: ~/dotfiles/nix/memes) and matched by
-filename with the extension stripped, e.g. "meme pepe" for pepe.jpg.
-width/height are terminal cells and default to 2x1. Run with no arguments to
-list what's available.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := pkg.MemeDir()
-			if len(args) == 0 {
-				names, err := pkg.ListMemes(dir)
-				if err != nil {
-					return err
-				}
-				fmt.Println("Usage: commandline_thing meme <name> [width] [height]")
-				fmt.Printf("Available memes in %s:\n", dir)
-				for _, n := range names {
-					fmt.Println("  " + n)
-				}
-				return nil
-			}
-
-			width, height := 2, 1
-			if len(args) > 1 {
-				w, err := strconv.Atoi(args[1])
-				if err != nil {
-					return fmt.Errorf("invalid width %q: %w", args[1], err)
-				}
-				width = w
-			}
-			if len(args) > 2 {
-				h, err := strconv.Atoi(args[2])
-				if err != nil {
-					return fmt.Errorf("invalid height %q: %w", args[2], err)
-				}
-				height = h
-			}
-
-			return pkg.EmitMeme(os.Stdout, dir, args[0], width, height)
-		},
-		Args: cobra.MaximumNArgs(3),
-	}
-
-	var memeLsCmd = &cobra.Command{
-		Use:   "meme-ls",
-		Short: "List available memes",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			dir := pkg.MemeDir()
-			names, err := pkg.ListMemes(dir)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Available memes in %s:\n", dir)
-			for _, n := range names {
-				fmt.Println("  " + n)
-			}
-			return nil
-		},
-		Args: cobra.NoArgs,
-	}
-
 	rootCmd.AddCommand(runUpdates)
 	// rootCmd.AddCommand(printDefaults)
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(setState)
 	rootCmd.AddCommand(startUpdate)
-	rootCmd.AddCommand(memeCmd)
-	rootCmd.AddCommand(memeLsCmd)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
