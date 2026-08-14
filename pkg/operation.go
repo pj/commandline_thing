@@ -32,7 +32,7 @@ type GitResult struct {
 
 func (b *Git) Name() OperationName                   { return "git" }
 func (b *Git) IsAsync() bool                         { return false }
-func (b *Git) Update(string, string) (string, error) { return "", nil }
+func (b *Git) Update(_ string, state string) (string, error) { return state, nil }
 func (b *Git) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
 	cmd.Dir = locationPath
@@ -60,7 +60,7 @@ type PythonVirtualEnv struct{}
 
 func (*PythonVirtualEnv) Name() OperationName                   { return "venv" }
 func (*PythonVirtualEnv) IsAsync() bool                         { return false }
-func (*PythonVirtualEnv) Update(string, string) (string, error) { return "", nil }
+func (*PythonVirtualEnv) Update(_ string, state string) (string, error) { return state, nil }
 func (*PythonVirtualEnv) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	return state, nil
 }
@@ -70,7 +70,7 @@ type VimMode struct{}
 
 func (*VimMode) Name() OperationName                   { return "vim" }
 func (*VimMode) IsAsync() bool                         { return false }
-func (*VimMode) Update(string, string) (string, error) { return "", nil }
+func (*VimMode) Update(_ string, state string) (string, error) { return state, nil }
 func (*VimMode) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	return state, nil
 }
@@ -80,7 +80,7 @@ type GCloudProject struct{}
 
 func (*GCloudProject) Name() OperationName                   { return "gcloud" }
 func (*GCloudProject) IsAsync() bool                         { return false }
-func (*GCloudProject) Update(string, string) (string, error) { return "", nil }
+func (*GCloudProject) Update(_ string, state string) (string, error) { return state, nil }
 func (*GCloudProject) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	// #  if type "gcloud" > /dev/null && gcloud projects list > /dev/null 2>&1 ; then
 	// #    tmux setenv -g "PANE_GCLOUD_PROJECT${IDS}" "$(gcloud config get-value project)"
@@ -95,7 +95,7 @@ type ExitCode struct{}
 
 func (*ExitCode) Name() OperationName                   { return "exit_code" }
 func (*ExitCode) IsAsync() bool                         { return false }
-func (*ExitCode) Update(string, string) (string, error) { return "", nil }
+func (*ExitCode) Update(_ string, state string) (string, error) { return state, nil }
 func (*ExitCode) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	return state, nil
 }
@@ -104,7 +104,7 @@ type WorkingDirectory struct{}
 
 func (*WorkingDirectory) Name() OperationName                   { return "working_directory" }
 func (*WorkingDirectory) IsAsync() bool                         { return false }
-func (*WorkingDirectory) Update(string, string) (string, error) { return "", nil }
+func (*WorkingDirectory) Update(_ string, state string) (string, error) { return state, nil }
 func (*WorkingDirectory) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -123,7 +123,7 @@ type TmuxActivePane struct{}
 
 func (*TmuxActivePane) Name() OperationName                   { return "tmux_active_pane" }
 func (*TmuxActivePane) IsAsync() bool                         { return false }
-func (*TmuxActivePane) Update(string, string) (string, error) { return "", nil }
+func (*TmuxActivePane) Update(_ string, state string) (string, error) { return state, nil }
 func (*TmuxActivePane) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	tmux := os.Getenv("TMUX")
 	if tmux == "" {
@@ -146,7 +146,7 @@ type TmuxCurrentPane struct{}
 
 func (*TmuxCurrentPane) Name() OperationName                   { return "tmux_current_pane" }
 func (*TmuxCurrentPane) IsAsync() bool                         { return false }
-func (*TmuxCurrentPane) Update(string, string) (string, error) { return "", nil }
+func (*TmuxCurrentPane) Update(_ string, state string) (string, error) { return state, nil }
 func (*TmuxCurrentPane) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	tmux := os.Getenv("TMUX")
 	if tmux == "" {
@@ -160,7 +160,7 @@ type InTmux struct{}
 
 func (*InTmux) Name() OperationName                   { return "in_tmux" }
 func (*InTmux) IsAsync() bool                         { return false }
-func (*InTmux) Update(string, string) (string, error) { return "", nil }
+func (*InTmux) Update(_ string, state string) (string, error) { return state, nil }
 func (*InTmux) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	tmux := os.Getenv("TMUX")
 	return tmux != "", nil
@@ -175,7 +175,7 @@ type HostDetailsResult struct {
 
 func (*HostDetails) Name() OperationName                   { return "host_details" }
 func (*HostDetails) IsAsync() bool                         { return false }
-func (*HostDetails) Update(string, string) (string, error) { return "", nil }
+func (*HostDetails) Update(_ string, state string) (string, error) { return state, nil }
 func (*HostDetails) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -198,7 +198,7 @@ type Meme struct{}
 
 func (*Meme) Name() OperationName                   { return "meme" }
 func (*Meme) IsAsync() bool                         { return false }
-func (*Meme) Update(string, string) (string, error) { return "", nil }
+func (*Meme) Update(_ string, state string) (string, error) { return state, nil }
 func (*Meme) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	dir := MemeDir()
 	names, err := ListMemes(dir)
