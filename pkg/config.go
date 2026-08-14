@@ -82,6 +82,11 @@ func OperationWrapperDecodeHook() mapstructure.DecodeHookFuncType {
 		}
 
 		op := newOperation()
+		if configurable, ok := op.(Configurable); ok {
+			if err := configurable.Configure(rawOp); err != nil {
+				return nil, fmt.Errorf("configuring operation %s: %w", typ, err)
+			}
+		}
 		wrapper := &OperationWrapper{Operation: op}
 
 		return wrapper, nil

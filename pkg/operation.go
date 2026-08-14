@@ -1,8 +1,10 @@
 package pkg
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -11,6 +13,13 @@ type Operation interface {
 	IsAsync() bool
 	Update(string, string) (string, error)
 	Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error)
+}
+
+// Configurable is implemented by operations that take extra fields from
+// their YAML entry beyond `type` (e.g. cycle's `name`/`names`). rawConfig is
+// the entry's full raw map, as decoded from YAML — including `type` itself.
+type Configurable interface {
+	Configure(rawConfig map[string]interface{}) error
 }
 
 // Git
@@ -205,6 +214,87 @@ func (*Meme) Generate(locationKey LocationKey, instanceKey InstanceKey, location
 	return memes, nil
 }
 
+// Cycle steps through a configured, ordered list of meme names by one on
+// every Update() call (wrapping around), and Generate() returns whichever
+// name is current. It's a name lookup, not a rendered character — combine
+// it with Meme's output in a template via {{ index .meme .<name> }} to get
+// the actual glyph.
+//
+// Configured in YAML as:
+//
+//	- type: cycle
+//	  name: nyan
+//	  names: [nyan1, nyan2, nyan3, nyan4]
+//
+// `name` becomes this instance's effective Name() — the template field
+// (.nyan) and the state-store key both key off it instead of the fixed
+// "cycle" type name, so multiple cycle operations can coexist in one
+// location's operations list without colliding, each with independent
+// state. Something still needs to actually call Update() for state to
+// advance each render — Generate() alone only reads the current index; see
+// `commandline_thing update`.
+type Cycle struct {
+	name  string
+	names []string
+}
+
+func (c *Cycle) Name() OperationName {
+	if c.name != "" {
+		return OperationName(c.name)
+	}
+	return "cycle"
+}
+func (*Cycle) IsAsync() bool { return false }
+
+func (c *Cycle) Configure(rawConfig map[string]interface{}) error {
+	if nameRaw, ok := rawConfig["name"]; ok {
+		name, ok := nameRaw.(string)
+		if !ok {
+			return fmt.Errorf("cycle: name must be a string")
+		}
+		c.name = name
+	}
+
+	namesRaw, ok := rawConfig["names"]
+	if !ok {
+		return fmt.Errorf("cycle: names is required")
+	}
+	namesList, ok := namesRaw.([]interface{})
+	if !ok {
+		return fmt.Errorf("cycle: names must be a list")
+	}
+	names := make([]string, 0, len(namesList))
+	for _, n := range namesList {
+		s, ok := n.(string)
+		if !ok {
+			return fmt.Errorf("cycle: names must be a list of strings")
+		}
+		names = append(names, s)
+	}
+	if len(names) == 0 {
+		return fmt.Errorf("cycle: names must not be empty")
+	}
+	c.names = names
+	return nil
+}
+
+func (c *Cycle) currentIndex(state string) int {
+	idx, err := strconv.Atoi(state)
+	if err != nil || idx < 0 || idx >= len(c.names) {
+		return 0
+	}
+	return idx
+}
+
+func (c *Cycle) Update(locationPath string, state string) (string, error) {
+	next := (c.currentIndex(state) + 1) % len(c.names)
+	return strconv.Itoa(next), nil
+}
+
+func (c *Cycle) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
+	return c.names[c.currentIndex(state)], nil
+}
+
 type NewOperation func() Operation
 
 type Operations map[OperationName]NewOperation
@@ -222,5 +312,6 @@ func LoadAvailableOperations() Operations {
 		(&HostDetails{}).Name():      func() Operation { return &HostDetails{} },
 		(&InTmux{}).Name():           func() Operation { return &InTmux{} },
 		(&Meme{}).Name():             func() Operation { return &Meme{} },
+		(&Cycle{}).Name():            func() Operation { return &Cycle{} },
 	}
 }
