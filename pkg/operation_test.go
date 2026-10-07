@@ -299,7 +299,41 @@ func TestJjOperationUsesChangeIDWhenAtHasNoBookmark(t *testing.T) {
 	result, ok := generated.(JjResult)
 	require.True(t, ok)
 	require.Empty(t, result.Status, "a freshly initialized jj repo's @ has no diff from its parent yet")
-	require.Len(t, result.Branch, 8, "with no bookmark at @, Branch should fall back to the short (8-char) change id")
+	require.GreaterOrEqual(t, len(result.Branch), 3, "with no bookmark at @, Branch should fall back to the minimal unique change-id prefix (shortest(3))")
+}
+
+func TestJjOperationShowsClosestBookmarkAndChangeIDWhenOnTopOfBookmark(t *testing.T) {
+	requireBinary(t, "jj")
+	dir := t.TempDir()
+	runCmd(t, dir, "jj", "git", "init")
+	runCmd(t, dir, "jj", "bookmark", "create", "main", "-r", "@-")
+	runCmd(t, dir, "jj", "new")
+
+	cmd := exec.Command("jj", "log", "-r", "@", "--no-graph", "-T", "change_id.shortest(3)")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err)
+
+	op := &Jj{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+	require.NoError(t, err)
+
+	result, ok := generated.(JjResult)
+	require.True(t, ok)
+	require.Equal(t, "main > #"+strings.TrimSpace(string(out)), result.Branch)
+	require.Empty(t, result.Bookmark, "@ has no bookmark of its own here")
+	require.Equal(t, "main", result.LastBookmark)
+
+	changeCmd := exec.Command("jj", "log", "-r", "@", "--no-graph", "-T", `change_id ++ "\x1f" ++ commit_id ++ "\x1f" ++ commit_id.short(8)`)
+	changeCmd.Dir = dir
+	idsOut, err := changeCmd.Output()
+	require.NoError(t, err)
+	ids := strings.Split(strings.TrimSpace(string(idsOut)), "\x1f")
+	require.Len(t, ids, 3)
+	require.Equal(t, ids[0], result.ChangeIDFull)
+	require.Equal(t, strings.TrimSpace(string(out)), result.ChangeIDShort)
+	require.Equal(t, ids[1], result.GitIDFull)
+	require.Equal(t, ids[2], result.GitIDShort)
 }
 
 func TestJjOperationReportsBookmarkAsBranch(t *testing.T) {
@@ -315,6 +349,8 @@ func TestJjOperationReportsBookmarkAsBranch(t *testing.T) {
 	result, ok := generated.(JjResult)
 	require.True(t, ok)
 	require.Equal(t, "main", result.Branch)
+	require.Equal(t, "main", result.Bookmark)
+	require.Empty(t, result.LastBookmark, "no bookmarked ancestor above @ when the bookmark is at @ itself")
 }
 
 func TestJjOperationReportsDirtyWorkingCopy(t *testing.T) {

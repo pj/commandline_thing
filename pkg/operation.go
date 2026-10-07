@@ -56,8 +56,9 @@ func (b *Git) Generate(locationKey LocationKey, instanceKey InstanceKey, locatio
 }
 
 // Jj shows Jujutsu VCS status: @'s bookmark (or, if @ has none, its short
-// change id) and whether it needs attention — the jj analogs of a git
-// branch name and a dirty working tree. jj has no staging area: every
+// change id, or "bookmark > #change-id" when @ sits on top of a bookmarked
+// commit) and whether it needs attention — the jj analogs of a git branch
+// name and a dirty working tree. jj has no staging area: every
 // working-copy edit is already part of the anonymous @ commit, so "the
 // working-copy commit is non-empty" is the direct jj equivalent of git's
 // "you have uncommitted changes".
@@ -78,6 +79,18 @@ type Jj struct{}
 type JjResult struct {
 	Branch string
 	Status string
+
+	// Raw fields for templates to compose their own display. Bookmark is
+	// what's currently at @; LastBookmark is the nearest bookmarked
+	// ancestor when @ itself has none. ChangeID/GitID come in short (jj's
+	// minimal unique prefix for the change id, 8 hex chars for the commit
+	// id) and full variants.
+	Bookmark      string
+	LastBookmark  string
+	ChangeIDShort string
+	ChangeIDFull  string
+	GitIDShort    string
+	GitIDFull     string
 }
 
 // jjFieldSep separates Jj.Generate's templated fields. Chosen because it
@@ -89,8 +102,9 @@ func (*Jj) Name() OperationName                           { return "jj" }
 func (*Jj) IsAsync() bool                                 { return false }
 func (*Jj) Update(_ string, state string) (string, error) { return state, nil }
 func (*Jj) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
-	template := `bookmarks.join(",") ++ "` + jjFieldSep + `" ++ change_id.short(8) ++ "` + jjFieldSep +
-		`" ++ if(empty, "1", "0") ++ "` + jjFieldSep + `" ++ if(conflict, "1", "0")`
+	template := `bookmarks.join(",") ++ "` + jjFieldSep + `" ++ change_id.shortest(3) ++ "` + jjFieldSep +
+		`" ++ change_id ++ "` + jjFieldSep + `" ++ commit_id.short(8) ++ "` + jjFieldSep +
+		`" ++ commit_id ++ "` + jjFieldSep + `" ++ if(empty, "1", "0") ++ "` + jjFieldSep + `" ++ if(conflict, "1", "0")`
 
 	cmd := exec.Command("jj", "log", "-r", "@", "--no-graph", "-T", template)
 	cmd.Dir = locationPath
@@ -103,16 +117,23 @@ func (*Jj) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPa
 	}
 
 	fields := strings.Split(strings.TrimSpace(string(output)), jjFieldSep)
-	if len(fields) != 4 {
+	if len(fields) != 7 {
 		return nil, nil
 	}
-	bookmarks, changeID, isEmpty, hasConflict := fields[0], fields[1], fields[2], fields[3]
+	bookmarks, changeIDShort, changeIDFull, gitIDShort, gitIDFull, isEmpty, hasConflict :=
+		fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]
 
 	branch := bookmarks
 	if branch == "" {
-		// No bookmark at @ — show the change id instead, exactly as `jj log`
-		// itself would, rather than leaving the branch field blank.
-		branch = changeID
+		// No bookmark at @. If @ sits on top of a bookmarked commit, show
+		// "bookmark > #change-id" (the closest bookmarked ancestors), which
+		// reads like "main > #qux"; otherwise fall back to the change id
+		// alone, exactly as `jj log` itself would.
+		if ancestor := jjAncestorBookmarks(locationPath); ancestor != "" {
+			branch = ancestor + " > #" + changeIDShort
+		} else {
+			branch = changeIDShort
+		}
 	}
 
 	var status []string
@@ -123,7 +144,31 @@ func (*Jj) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPa
 		status = append(status, "conflict")
 	}
 
-	return JjResult{Branch: branch, Status: strings.Join(status, ",")}, nil
+	return JjResult{
+		Branch:        branch,
+		Status:        strings.Join(status, ","),
+		Bookmark:      bookmarks,
+		LastBookmark:  jjAncestorBookmarks(locationPath),
+		ChangeIDShort: changeIDShort,
+		ChangeIDFull:  changeIDFull,
+		GitIDShort:    gitIDShort,
+		GitIDFull:     gitIDFull,
+	}, nil
+}
+
+// jjAncestorBookmarks returns the bookmarks on the closest bookmarked
+// strict ancestors of @ (joined by ","), or "" when @ has no bookmarked
+// ancestor or jj can't be consulted. Empty output with a zero exit is a
+// valid "none" answer, not an error — only a failed exec is swallowed
+// here, letting Generate's caller keep its existing nil posture.
+func jjAncestorBookmarks(locationPath string) string {
+	cmd := exec.Command("jj", "log", "-r", "heads(::@- & bookmarks())", "--no-graph", "-T", `bookmarks.join(",")`)
+	cmd.Dir = locationPath
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }
 
 // venv
