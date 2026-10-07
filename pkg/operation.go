@@ -30,8 +30,8 @@ type GitResult struct {
 	Status string
 }
 
-func (b *Git) Name() OperationName                   { return "git" }
-func (b *Git) IsAsync() bool                         { return false }
+func (b *Git) Name() OperationName                           { return "git" }
+func (b *Git) IsAsync() bool                                 { return false }
 func (b *Git) Update(_ string, state string) (string, error) { return state, nil }
 func (b *Git) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
@@ -55,11 +55,82 @@ func (b *Git) Generate(locationKey LocationKey, instanceKey InstanceKey, locatio
 	return GitResult{Branch: branch, Status: status}, nil
 }
 
+// Jj shows Jujutsu VCS status: @'s bookmark (or, if @ has none, its short
+// change id) and whether it needs attention — the jj analogs of a git
+// branch name and a dirty working tree. jj has no staging area: every
+// working-copy edit is already part of the anonymous @ commit, so "the
+// working-copy commit is non-empty" is the direct jj equivalent of git's
+// "you have uncommitted changes".
+//
+// A separate operation from Git (rather than Git detecting jj and silently
+// overriding its own output) so config templates explicitly choose which
+// VCS to display, e.g.:
+//
+//	{{- if .jj }}  {{ .jj.Branch }}{{ if .jj.Status }} *{{ end }}
+//	{{- else if and .git .git.Branch }}  {{ .git.Branch }}{{ if .git.Status }} *{{ end }}
+//	{{- end }}
+//
+// JjResult deliberately mirrors GitResult's Branch/Status shape so a
+// template only has to swap which operation's data it reads, not how it
+// reads it.
+type Jj struct{}
+
+type JjResult struct {
+	Branch string
+	Status string
+}
+
+// jjFieldSep separates Jj.Generate's templated fields. Chosen because it
+// can't appear in a bookmark name, a change id, or either "0"/"1" flag, so
+// a single strings.Split needs no further validation of its parts.
+const jjFieldSep = "\x1f"
+
+func (*Jj) Name() OperationName                           { return "jj" }
+func (*Jj) IsAsync() bool                                 { return false }
+func (*Jj) Update(_ string, state string) (string, error) { return state, nil }
+func (*Jj) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
+	template := `bookmarks.join(",") ++ "` + jjFieldSep + `" ++ change_id.short(8) ++ "` + jjFieldSep +
+		`" ++ if(empty, "1", "0") ++ "` + jjFieldSep + `" ++ if(conflict, "1", "0")`
+
+	cmd := exec.Command("jj", "log", "-r", "@", "--no-graph", "-T", template)
+	cmd.Dir = locationPath
+	output, err := cmd.Output()
+	if err != nil {
+		// Not a jj repo, or the jj binary isn't available — nothing to
+		// report, same swallow-the-error-and-report-nothing posture Git
+		// already has for a failed/absent git. `{{ if .jj }}` is then false.
+		return nil, nil
+	}
+
+	fields := strings.Split(strings.TrimSpace(string(output)), jjFieldSep)
+	if len(fields) != 4 {
+		return nil, nil
+	}
+	bookmarks, changeID, isEmpty, hasConflict := fields[0], fields[1], fields[2], fields[3]
+
+	branch := bookmarks
+	if branch == "" {
+		// No bookmark at @ — show the change id instead, exactly as `jj log`
+		// itself would, rather than leaving the branch field blank.
+		branch = changeID
+	}
+
+	var status []string
+	if isEmpty != "1" {
+		status = append(status, "dirty")
+	}
+	if hasConflict == "1" {
+		status = append(status, "conflict")
+	}
+
+	return JjResult{Branch: branch, Status: strings.Join(status, ",")}, nil
+}
+
 // venv
 type PythonVirtualEnv struct{}
 
-func (*PythonVirtualEnv) Name() OperationName                   { return "venv" }
-func (*PythonVirtualEnv) IsAsync() bool                         { return false }
+func (*PythonVirtualEnv) Name() OperationName                           { return "venv" }
+func (*PythonVirtualEnv) IsAsync() bool                                 { return false }
 func (*PythonVirtualEnv) Update(_ string, state string) (string, error) { return state, nil }
 func (*PythonVirtualEnv) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	return state, nil
@@ -68,8 +139,8 @@ func (*PythonVirtualEnv) Generate(locationKey LocationKey, instanceKey InstanceK
 // vim mode
 type VimMode struct{}
 
-func (*VimMode) Name() OperationName                   { return "vim" }
-func (*VimMode) IsAsync() bool                         { return false }
+func (*VimMode) Name() OperationName                           { return "vim" }
+func (*VimMode) IsAsync() bool                                 { return false }
 func (*VimMode) Update(_ string, state string) (string, error) { return state, nil }
 func (*VimMode) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	return state, nil
@@ -78,8 +149,8 @@ func (*VimMode) Generate(locationKey LocationKey, instanceKey InstanceKey, locat
 // // gcloud project
 type GCloudProject struct{}
 
-func (*GCloudProject) Name() OperationName                   { return "gcloud" }
-func (*GCloudProject) IsAsync() bool                         { return false }
+func (*GCloudProject) Name() OperationName                           { return "gcloud" }
+func (*GCloudProject) IsAsync() bool                                 { return false }
 func (*GCloudProject) Update(_ string, state string) (string, error) { return state, nil }
 func (*GCloudProject) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	// #  if type "gcloud" > /dev/null && gcloud projects list > /dev/null 2>&1 ; then
@@ -93,8 +164,8 @@ func (*GCloudProject) Generate(locationKey LocationKey, instanceKey InstanceKey,
 // // exit code
 type ExitCode struct{}
 
-func (*ExitCode) Name() OperationName                   { return "exit_code" }
-func (*ExitCode) IsAsync() bool                         { return false }
+func (*ExitCode) Name() OperationName                           { return "exit_code" }
+func (*ExitCode) IsAsync() bool                                 { return false }
 func (*ExitCode) Update(_ string, state string) (string, error) { return state, nil }
 func (*ExitCode) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	return state, nil
@@ -102,8 +173,8 @@ func (*ExitCode) Generate(locationKey LocationKey, instanceKey InstanceKey, loca
 
 type WorkingDirectory struct{}
 
-func (*WorkingDirectory) Name() OperationName                   { return "working_directory" }
-func (*WorkingDirectory) IsAsync() bool                         { return false }
+func (*WorkingDirectory) Name() OperationName                           { return "working_directory" }
+func (*WorkingDirectory) IsAsync() bool                                 { return false }
 func (*WorkingDirectory) Update(_ string, state string) (string, error) { return state, nil }
 func (*WorkingDirectory) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	homeDir, err := os.UserHomeDir()
@@ -121,8 +192,8 @@ func (*WorkingDirectory) Generate(locationKey LocationKey, instanceKey InstanceK
 
 type TmuxActivePane struct{}
 
-func (*TmuxActivePane) Name() OperationName                   { return "tmux_active_pane" }
-func (*TmuxActivePane) IsAsync() bool                         { return false }
+func (*TmuxActivePane) Name() OperationName                           { return "tmux_active_pane" }
+func (*TmuxActivePane) IsAsync() bool                                 { return false }
 func (*TmuxActivePane) Update(_ string, state string) (string, error) { return state, nil }
 func (*TmuxActivePane) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	tmux := os.Getenv("TMUX")
@@ -144,8 +215,8 @@ func (*TmuxActivePane) Generate(locationKey LocationKey, instanceKey InstanceKey
 
 type TmuxCurrentPane struct{}
 
-func (*TmuxCurrentPane) Name() OperationName                   { return "tmux_current_pane" }
-func (*TmuxCurrentPane) IsAsync() bool                         { return false }
+func (*TmuxCurrentPane) Name() OperationName                           { return "tmux_current_pane" }
+func (*TmuxCurrentPane) IsAsync() bool                                 { return false }
 func (*TmuxCurrentPane) Update(_ string, state string) (string, error) { return state, nil }
 func (*TmuxCurrentPane) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	tmux := os.Getenv("TMUX")
@@ -158,8 +229,8 @@ func (*TmuxCurrentPane) Generate(locationKey LocationKey, instanceKey InstanceKe
 
 type InTmux struct{}
 
-func (*InTmux) Name() OperationName                   { return "in_tmux" }
-func (*InTmux) IsAsync() bool                         { return false }
+func (*InTmux) Name() OperationName                           { return "in_tmux" }
+func (*InTmux) IsAsync() bool                                 { return false }
 func (*InTmux) Update(_ string, state string) (string, error) { return state, nil }
 func (*InTmux) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	tmux := os.Getenv("TMUX")
@@ -173,8 +244,8 @@ type HostDetailsResult struct {
 	IsSSH    bool
 }
 
-func (*HostDetails) Name() OperationName                   { return "host_details" }
-func (*HostDetails) IsAsync() bool                         { return false }
+func (*HostDetails) Name() OperationName                           { return "host_details" }
+func (*HostDetails) IsAsync() bool                                 { return false }
 func (*HostDetails) Update(_ string, state string) (string, error) { return state, nil }
 func (*HostDetails) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	hostname, err := os.Hostname()
@@ -196,8 +267,8 @@ func (*HostDetails) Generate(locationKey LocationKey, instanceKey InstanceKey, l
 // {{ .meme.doge-2 }}.
 type Meme struct{}
 
-func (*Meme) Name() OperationName                   { return "meme" }
-func (*Meme) IsAsync() bool                         { return false }
+func (*Meme) Name() OperationName                           { return "meme" }
+func (*Meme) IsAsync() bool                                 { return false }
 func (*Meme) Update(_ string, state string) (string, error) { return state, nil }
 func (*Meme) Generate(locationKey LocationKey, instanceKey InstanceKey, locationPath string, state string) (interface{}, error) {
 	dir := MemeDir()
@@ -222,9 +293,9 @@ func (*Meme) Generate(locationKey LocationKey, instanceKey InstanceKey, location
 //
 // Configured in YAML as:
 //
-//	- type: cycle
-//	  name: nyan
-//	  names: [nyan1, nyan2, nyan3, nyan4]
+//   - type: cycle
+//     name: nyan
+//     names: [nyan1, nyan2, nyan3, nyan4]
 //
 // `name` becomes this instance's effective Name() — the template field
 // (.nyan) and the state-store key both key off it instead of the fixed
@@ -302,6 +373,7 @@ type Operations map[OperationName]NewOperation
 func LoadAvailableOperations() Operations {
 	return map[OperationName]NewOperation{
 		(&Git{}).Name():              func() Operation { return &Git{} },
+		(&Jj{}).Name():               func() Operation { return &Jj{} },
 		(&PythonVirtualEnv{}).Name(): func() Operation { return &PythonVirtualEnv{} },
 		(&VimMode{}).Name():          func() Operation { return &VimMode{} },
 		(&GCloudProject{}).Name():    func() Operation { return &GCloudProject{} },

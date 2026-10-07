@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +10,28 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+// requireBinary skips the test when name isn't on PATH, rather than failing
+// a machine that simply doesn't have git/jj installed.
+func requireBinary(t *testing.T, name string) {
+	t.Helper()
+	if _, err := exec.LookPath(name); err != nil {
+		t.Skipf("%s not found on PATH", name)
+	}
+}
+
+// runCmd runs name with args in dir, failing the test on any error. Used to
+// set up real git/jj repos for the Git operation's tests below — this
+// codebase's existing tests (see Meme below) already favor exercising real
+// on-disk/subprocess behavior over mocking, and there's no exec.Command
+// abstraction here to mock even if we wanted to.
+func runCmd(t *testing.T, dir, name string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "%s %s: %s", name, strings.Join(args, " "), output)
+}
 
 func TestMemeOperationGenerateReturnsCodepointPerName(t *testing.T) {
 	dir := t.TempDir()
@@ -183,4 +206,165 @@ func TestCycleUsableWithMemeMapInTemplateViaIndex(t *testing.T) {
 	var buf strings.Builder
 	require.NoError(t, tmpl.Execute(&buf, map[string]interface{}{"meme": memes, "nyan": current}))
 	require.Equal(t, string(rune(MemeCodepointBase+1)), buf.String())
+}
+
+func TestGitOperationRegisteredInAvailableOperations(t *testing.T) {
+	ops := LoadAvailableOperations()
+	newOp, ok := ops["git"]
+	require.True(t, ok)
+	require.IsType(t, &Git{}, newOp())
+}
+
+func TestGitOperationReturnsGitBranchAndCleanStatus(t *testing.T) {
+	requireBinary(t, "git")
+	dir := t.TempDir()
+	runCmd(t, dir, "git", "init", "-b", "main", "-q")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hello"), 0644))
+	runCmd(t, dir, "git", "add", "f.txt")
+	runCmd(t, dir, "git", "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-qm", "init")
+
+	op := &Git{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+	require.NoError(t, err)
+
+	require.Equal(t, GitResult{Branch: "main", Status: ""}, generated)
+}
+
+func TestGitOperationReportsDirtyStatus(t *testing.T) {
+	requireBinary(t, "git")
+	dir := t.TempDir()
+	runCmd(t, dir, "git", "init", "-b", "main", "-q")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hello"), 0644))
+	runCmd(t, dir, "git", "add", "f.txt")
+	runCmd(t, dir, "git", "-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "-qm", "init")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("changed"), 0644))
+
+	op := &Git{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+	require.NoError(t, err)
+
+	result, ok := generated.(GitResult)
+	require.True(t, ok)
+	require.NotEmpty(t, result.Status, "a modified tracked file must show as dirty via git status -s")
+}
+
+func TestGitOperationReturnsNilOutsideAnyRepo(t *testing.T) {
+	dir := t.TempDir()
+
+	op := &Git{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+
+	require.NoError(t, err)
+	require.Nil(t, generated, "no repo present — nothing to report")
+}
+
+func TestJjOperationRegisteredInAvailableOperations(t *testing.T) {
+	ops := LoadAvailableOperations()
+	newOp, ok := ops["jj"]
+	require.True(t, ok)
+	require.IsType(t, &Jj{}, newOp())
+}
+
+func TestJjOperationReturnsNilOutsideAJJRepo(t *testing.T) {
+	requireBinary(t, "jj")
+	dir := t.TempDir()
+
+	op := &Jj{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+
+	require.NoError(t, err)
+	require.Nil(t, generated, "an empty directory with no .jj must not be treated as a jj repo")
+}
+
+func TestJjOperationReturnsNilWhenJJBinaryMissing(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", "")
+
+	op := &Jj{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+
+	require.NoError(t, err)
+	require.Nil(t, generated)
+}
+
+func TestJjOperationUsesChangeIDWhenAtHasNoBookmark(t *testing.T) {
+	requireBinary(t, "jj")
+	dir := t.TempDir()
+	runCmd(t, dir, "jj", "git", "init")
+
+	op := &Jj{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+	require.NoError(t, err)
+
+	result, ok := generated.(JjResult)
+	require.True(t, ok)
+	require.Empty(t, result.Status, "a freshly initialized jj repo's @ has no diff from its parent yet")
+	require.Len(t, result.Branch, 8, "with no bookmark at @, Branch should fall back to the short (8-char) change id")
+}
+
+func TestJjOperationReportsBookmarkAsBranch(t *testing.T) {
+	requireBinary(t, "jj")
+	dir := t.TempDir()
+	runCmd(t, dir, "jj", "git", "init")
+	runCmd(t, dir, "jj", "bookmark", "create", "main", "-r", "@")
+
+	op := &Jj{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+	require.NoError(t, err)
+
+	result, ok := generated.(JjResult)
+	require.True(t, ok)
+	require.Equal(t, "main", result.Branch)
+}
+
+func TestJjOperationReportsDirtyWorkingCopy(t *testing.T) {
+	requireBinary(t, "jj")
+	dir := t.TempDir()
+	runCmd(t, dir, "jj", "git", "init")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hello"), 0644))
+
+	op := &Jj{}
+	generated, err := op.Generate("pane", "tmux.%1", dir, "")
+	require.NoError(t, err)
+
+	result, ok := generated.(JjResult)
+	require.True(t, ok)
+	require.Contains(t, result.Status, "dirty")
+}
+
+func TestJjAndGitOperationsCanCoexistInOneTemplate(t *testing.T) {
+	requireBinary(t, "jj")
+	dir := t.TempDir()
+	runCmd(t, dir, "jj", "git", "init")
+	runCmd(t, dir, "jj", "bookmark", "create", "main", "-r", "@")
+
+	jjOp := &Jj{}
+	jjResult, err := jjOp.Generate("pane", "tmux.%1", dir, "")
+	require.NoError(t, err)
+
+	// Both operations always run (Generate doesn't know or care what the
+	// template does with its output) — it's the config template that picks
+	// jj over git when jj is available, e.g.
+	// `{{ if .jj }}...{{ else if .git }}...{{ end }}`. gitResult is left nil
+	// here (as it would be for an uncommitted jj repo with no exported git
+	// commit yet) specifically to prove the template's jj-branch doesn't
+	// depend on git having anything to say at all.
+	var gitResult interface{}
+
+	tmpl, err := template.New("t").Parse(`{{- if .jj }}jj:{{ .jj.Branch }}{{ else if .git }}git:{{ .git.Branch }}{{ end -}}`)
+	require.NoError(t, err)
+
+	var buf strings.Builder
+	require.NoError(t, tmpl.Execute(&buf, map[string]interface{}{"jj": jjResult, "git": gitResult}))
+	require.Equal(t, "jj:main", buf.String())
+}
+
+func TestGitTemplateFallbackWhenJjIsNil(t *testing.T) {
+	tmpl, err := template.New("t").Parse(`{{- if .jj }}jj:{{ .jj.Branch }}{{ else if .git }}git:{{ .git.Branch }}{{ end -}}`)
+	require.NoError(t, err)
+
+	var buf strings.Builder
+	data := map[string]interface{}{"jj": nil, "git": GitResult{Branch: "main"}}
+	require.NoError(t, tmpl.Execute(&buf, data))
+	require.Equal(t, "git:main", buf.String())
 }
