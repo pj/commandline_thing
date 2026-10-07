@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/pj/commandline_thing/pkg"
 	"github.com/spf13/cobra"
@@ -179,6 +181,32 @@ func main() {
 	// 	},
 	// }
 
+	var watchCmd = &cobra.Command{
+		Use:   "watch [interval-seconds]",
+		Short: "periodically refresh tmux clients so pane borders stay fresh",
+		Long: `Refresh every attached tmux client every interval so pane-border-format's
+#(...) commands (and the jj/git state they show) keep updating while panes
+are idle. Exits if a watcher is already running.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			interval := 5 * time.Second
+			if len(args) > 0 {
+				secs, err := strconv.Atoi(args[0])
+				if err != nil || secs <= 0 {
+					return fmt.Errorf("interval must be a positive number of seconds, got %q", args[0])
+				}
+				interval = time.Duration(secs) * time.Second
+			}
+
+			logger, err := setupLogger()
+			if err != nil {
+				return err
+			}
+
+			return pkg.Watch(interval, "", logger)
+		},
+		Args: cobra.MaximumNArgs(1),
+	}
+
 	var setState = &cobra.Command{
 		Use:   "set-state",
 		Short: "set state for an operation",
@@ -220,6 +248,7 @@ func main() {
 	rootCmd.AddCommand(generateCmd)
 	rootCmd.AddCommand(setState)
 	rootCmd.AddCommand(startUpdate)
+	rootCmd.AddCommand(watchCmd)
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
